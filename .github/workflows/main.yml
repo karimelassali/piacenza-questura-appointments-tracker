@@ -1,0 +1,53 @@
+name: Booking Monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Create storage directories
+        run: |
+          mkdir -p storage
+          mkdir -p screenshots
+
+      - name: Restore state cache
+        uses: actions/cache@v4
+        with:
+          path: storage
+          key: booking-monitor-state-${{ github.run_id }}
+          restore-keys: |
+            booking-monitor-state-
+
+      - name: Run monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          BOOKING_URL: ${{ secrets.BOOKING_URL }}
+        run: npm run monitor
+
+      - name: Save state cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: storage
+          key: booking-monitor-state-${{ github.run_id }}
