@@ -2,7 +2,7 @@ name: Booking Monitor
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -10,46 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: booking-monitor/package-lock.json
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
         run: npm install
-        working-directory: booking-monitor
 
-      - name: Install Playwright Browsers
-        run: npx playwright install chromium --with-deps
-        working-directory: booking-monitor
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
 
-      - name: Restore State
+      - name: Create storage directories
+        run: |
+          mkdir -p storage
+          mkdir -p screenshots
+
+      - name: Restore state cache
         uses: actions/cache@v4
         with:
-          path: booking-monitor/storage
-          key: ${{ runner.os }}-booking-state-${{ github.run_id }}
+          path: storage
+          key: booking-monitor-state-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-booking-state-
+            booking-monitor-state-
 
-      - name: Run Monitor
-        run: npm run monitor
-        working-directory: booking-monitor
+      - name: Run monitor
         env:
-          BOOKING_URL: ${{ secrets.BOOKING_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          HEADLESS: true
-          STATE_FILE_PATH: ./storage/state.json
-          SCREENSHOTS_DIR: ./screenshots
+          BOOKING_URL: ${{ secrets.BOOKING_URL }}
+        run: npm run monitor
 
-      - name: Save State
+      - name: Save state cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache@v4
         with:
-          path: booking-monitor/storage
-          key: ${{ runner.os }}-booking-state-${{ github.run_id }}
+          path: storage
+          key: booking-monitor-state-${{ github.run_id }}
