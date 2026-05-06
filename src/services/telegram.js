@@ -73,6 +73,15 @@ class TelegramService {
     message += `\n<i>t-qelleb f: ${new Date().toLocaleString()}</i>`;
     return message;
   }
+
+  formatPossibleAvailabilityMessage() {
+    let message = `<b>⚠️ momkin fih mowaid (mochekouk)</b>\n\n`;
+    message += `l-monitor ma-lqa-ch mowaid wadeh, walakin ma-ban lih-ch l-pauze dyal "ma-kayn hta mowaid".\n`;
+    message += `khass-ek dkhoul t-chouf rassek hit momkin kayn chi slot.\n\n`;
+    message += `<a href="${config.bookingUrl}">🔗 dkhoul t-chouf men hna</a>\n`;
+    message += `\n<i>t-qelleb f: ${new Date().toLocaleString()}</i>`;
+    return message;
+  }
 }
 
 module.exports = new TelegramService();

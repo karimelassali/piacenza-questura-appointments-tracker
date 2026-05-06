@@ -35,35 +35,33 @@ async function main() {
     const availability = await runMonitorWithRetries();
 
     // 3. Handle results
-    if (availability.found) {
+    if (availability.found || availability.confidence === 'confirmed') {
       if (stateManager.shouldNotify(availability)) {
-        logger.info('New availability detected! Sending notification...');
-        
+        logger.info('Confirmed availability detected! Sending notification...');
         const message = telegramService.formatAlertMessage(availability);
-        
-        if (availability.screenshotPath) {
-          await telegramService.sendPhoto(availability.screenshotPath, message);
-        } else {
-          await telegramService.sendMessage(message);
-        }
-
+        if (availability.screenshotPath) await telegramService.sendPhoto(availability.screenshotPath, message);
+        else await telegramService.sendMessage(message);
         await stateManager.updateState(availability);
       } else {
-        logger.info('Availability unchanged since last notification. Skipping alert.');
+        logger.info('Availability unchanged. Skipping alert.');
       }
-      
-    } else {
-      logger.info('No availability found. Sending update...');
-      
-      const message = telegramService.formatNoAvailabilityMessage();
-      
-      if (availability.screenshotPath) {
-        await telegramService.sendPhoto(availability.screenshotPath, message);
-      } else {
-        await telegramService.sendMessage(message);
-      }
+    } else if (availability.confidence === 'possible') {
+      logger.info('Possible availability detected! Sending warning...');
+      const message = telegramService.formatPossibleAvailabilityMessage();
+      if (availability.screenshotPath) await telegramService.sendPhoto(availability.screenshotPath, message);
+      else await telegramService.sendMessage(message);
 
-      // Update state to "nothing found" to reset hash if needed
+      // Update state to avoid spamming the "possible" alert
+      if (stateManager.state.lastAvailabilityHash !== 'possible') {
+        stateManager.state.lastAvailabilityHash = 'possible';
+        await stateManager.save();
+      }
+    } else {
+      logger.info('No availability found (confirmed by indicators). Sending update...');
+      const message = telegramService.formatNoAvailabilityMessage();
+      if (availability.screenshotPath) await telegramService.sendPhoto(availability.screenshotPath, message);
+      else await telegramService.sendMessage(message);
+
       if (stateManager.state.lastAvailabilityHash !== 'empty') {
         await stateManager.updateState({ found: false, dates: [], slots: [] });
         stateManager.state.lastAvailabilityHash = 'empty';
