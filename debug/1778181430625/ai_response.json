@@ -1,0 +1,10 @@
+{
+  "status": "none",
+  "confidence": 100,
+  "reason": "No extracted DOM text, candidate dates, or times were provided in the input data.",
+  "dates": [],
+  "times": [],
+  "siteChanged": false,
+  "needsManualCheck": true,
+  "darijaSummary": "ما لقيت والو dyal lmodawat."
+}

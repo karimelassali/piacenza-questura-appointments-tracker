@@ -57,30 +57,56 @@ class TelegramService {
     }
   }
 
-  formatAlertMessage(availability) {
-    let message = `<b>🚨 lqa l-mowaaid! (Randez-vous lqinah!)</b>\n\n`;
-    message += `<b>📅 l-iyam:</b> ${availability.dates.join(', ')}\n`;
-    message += `<b>⏰ l-oqat:</b> ${availability.slots.slice(0, 10).join(', ')}${availability.slots.length > 10 ? '...' : ''}\n\n`;
-    message += `<a href="${config.bookingUrl}">🔗 r-bat l-mowaid men hna</a>\n`;
-    message += `\n<i>t-dar f: ${new Date().toLocaleString()}</i>`;
+  formatAlertMessage(availability, aiResult = null) {
+    let message = `🚨 <b>لقيت موعد متاح فـ Questura ديال Piacenza!</b>\n\n`;
+    message += `📅 <b>التاريخ:</b> ${availability.dates.join(', ')}\n`;
+    message += `⏰ <b>الوقت:</b> ${availability.slots.slice(0, 10).join(', ')}${availability.slots.length > 10 ? '...' : ''}\n\n`;
+    
+    if (aiResult && aiResult.darijaSummary) {
+      message += `🤖 <b>تحليل AI:</b> ${aiResult.darijaSummary}\n`;
+      message += `🎯 <b>نسبة التأكد:</b> ${aiResult.confidence}%\n\n`;
+    }
+
+    message += `<a href="${config.bookingUrl}">🔗 ر-باط ل-موعيد من هنا</a>\n`;
+    message += `\n<i>ت-دار ف: ${new Date().toLocaleString('ar-MA')}</i>`;
     return message;
   }
 
-  formatNoAvailabilityMessage() {
-    let message = `<b>ℹ️ ma-kayn hta mowaid</b>\n\n`;
-    message += `l-monitor qelleb f had ch-ehar u ch-ehar l-jay u ma-lqa hta mowaid khawi.\n\n`;
-    message += `<a href="${config.bookingUrl}">🔗 chouf l-pej men hna</a>\n`;
-    message += `\n<i>t-qelleb f: ${new Date().toLocaleString()}</i>`;
+  formatNoAvailabilityMessage(aiResult = null) {
+    let message = `❌ <b>مزال ما بان حتى موعد جديد.</b>\n\n`;
+    
+    if (aiResult && aiResult.darijaSummary) {
+      message += `🤖 <b>AI:</b> ${aiResult.darijaSummary}\n\n`;
+    }
+
+    message += `<a href="${config.bookingUrl}">🔗 شوف ل-باج من هنا</a>\n`;
+    message += `\n<i>ت-قلب ف: ${new Date().toLocaleString('ar-MA')}</i>`;
     return message;
   }
 
-  formatPossibleAvailabilityMessage() {
-    let message = `<b>⚠️ momkin fih mowaid (mochekouk)</b>\n\n`;
-    message += `l-monitor ma-lqa-ch mowaid wadeh, walakin ma-ban lih-ch l-pauze dyal "ma-kayn hta mowaid".\n`;
-    message += `khass-ek dkhoul t-chouf rassek hit momkin kayn chi slot.\n\n`;
-    message += `<a href="${config.bookingUrl}">🔗 dkhoul t-chouf men hna</a>\n`;
-    message += `\n<i>t-qelleb f: ${new Date().toLocaleString()}</i>`;
+  formatPossibleAvailabilityMessage(aiResult = null) {
+    let message = `🤔 <b>كاين احتمال يكون تفتح موعد جديد، دخل تأكد بسرعة.</b>\n\n`;
+    
+    if (aiResult && aiResult.darijaSummary) {
+      message += `🤖 <b>تحليل AI:</b> ${aiResult.darijaSummary}\n`;
+      message += `🎯 <b>نسبة التأكد:</b> ${aiResult.confidence}%\n\n`;
+    }
+
+    message += `<a href="${config.bookingUrl}">🔗 دخل تشوف من هنا</a>\n`;
+    message += `\n<i>ت-قلب ف: ${new Date().toLocaleString('ar-MA')}</i>`;
     return message;
+  }
+
+  formatSiteChangedMessage() {
+    return `⚠️ <b>شكل الموقع تبدل شوية، ممكن نظام الفحص يحتاج تحديث.</b>\n\n<a href="${config.bookingUrl}">🔗 دخل تأكد يدوياً</a>`;
+  }
+
+  formatAIUnavailableMessage() {
+    return `⚠️ <b>AI ما خدمش دابا، استعملت غير الفحص العادي.</b>`;
+  }
+
+  formatSuspiciousMessage() {
+    return `🧐 <b>كاين شي حاجة مشبوهة فالموقع، الأفضل تدخل تشوف براسك.</b>`;
   }
 }
 

@@ -1,0 +1,10 @@
+{
+  "status": "none",
+  "confidence": 100,
+  "reason": "No candidate dates or times detected",
+  "dates": [],
+  "times": [],
+  "siteChanged": false,
+  "needsManualCheck": false,
+  "darijaSummary": ""
+}
