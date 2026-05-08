@@ -68,8 +68,7 @@ async function main() {
     } else {
       logger.info('No availability found.');
       const message = telegramService.formatNoAvailabilityMessage(aiResult);
-      // Only send "no availability" if it's the first time we see it or if explicitly requested
-      if (stateManager.state.lastAvailabilityHash !== 'empty') {
+      if (stateManager.state.lastAvailabilityHash !== 'empty' || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
         await telegramService.sendPhoto(availability.screenshotPath, message);
         await stateManager.updateState({ found: false, dates: [], slots: [] });
         stateManager.state.lastAvailabilityHash = 'empty';

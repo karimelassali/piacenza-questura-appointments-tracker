@@ -43,6 +43,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           BOOKING_URL: ${{ secrets.BOOKING_URL }}
+          AI_ENABLED: "true"
+          AI_API_URL: ${{ secrets.AI_API_URL || 'https://integrate.api.nvidia.com/v1' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY || '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' }}
+          AI_MODEL_NAME: ${{ secrets.AI_MODEL_NAME || 'meta/llama-3.1-70b-instruct' }}
         run: npm run monitor
 
       - name: Save state cache
