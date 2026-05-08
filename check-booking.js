@@ -9,6 +9,15 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function sendScreenshots(screenshotPaths, message) {
+  if (!screenshotPaths || screenshotPaths.length === 0) return;
+  if (screenshotPaths.length > 1) {
+    await telegramService.sendMediaGroup(screenshotPaths, message);
+  } else {
+    await telegramService.sendPhoto(screenshotPaths[0], message);
+  }
+}
+
 async function runMonitorWithRetries(maxRetries = 3) {
   let attempt = 1;
   while (attempt <= maxRetries) {
@@ -31,8 +40,8 @@ async function main() {
     const availability = await runMonitorWithRetries();
     
     let aiResult = null;
-    if (config.ai.enabled && availability.screenshotPath) {
-      aiResult = await aiVerifier.verify(availability.screenshotPath, {
+    if (config.ai.enabled && availability.screenshotPaths?.length > 0) {
+      aiResult = await aiVerifier.verify(availability.screenshotPaths[0], {
         text: availability.domText,
         dates: availability.dates,
         slots: availability.slots
@@ -52,7 +61,7 @@ async function main() {
       if (stateManager.shouldNotify(availability)) {
         logger.info('Confirmed availability! Sending notification...');
         const message = telegramService.formatAlertMessage(availability, aiResult);
-        await telegramService.sendPhoto(availability.screenshotPath, message);
+        await sendScreenshots(availability.screenshotPaths, message);
         await stateManager.updateState(availability);
       } else {
         logger.info('Availability unchanged. Skipping alert.');
@@ -60,16 +69,16 @@ async function main() {
     } else if (status === 'possible' || availability.confidence === 'possible') {
       logger.info('Possible availability! Sending warning...');
       if (stateManager.state.lastAvailabilityHash !== 'possible') {
-        const message = telegramService.formatPossibleAvailabilityMessage(aiResult);
-        await telegramService.sendPhoto(availability.screenshotPath, message);
+        const message = telegramService.formatPossibleAvailabilityMessage(availability, aiResult);
+        await sendScreenshots(availability.screenshotPaths, message);
         stateManager.state.lastAvailabilityHash = 'possible';
         await stateManager.save();
       }
     } else {
       logger.info('No availability found.');
-      const message = telegramService.formatNoAvailabilityMessage(aiResult);
+      const message = telegramService.formatNoAvailabilityMessage(availability, aiResult);
       if (stateManager.state.lastAvailabilityHash !== 'empty' || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
-        await telegramService.sendPhoto(availability.screenshotPath, message);
+        await sendScreenshots(availability.screenshotPaths, message);
         await stateManager.updateState({ found: false, dates: [], slots: [] });
         stateManager.state.lastAvailabilityHash = 'empty';
         await stateManager.save();

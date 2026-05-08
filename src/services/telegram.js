@@ -57,6 +57,44 @@ class TelegramService {
     }
   }
 
+  async sendMediaGroup(photoPaths, caption) {
+    try {
+      const form = new FormData();
+      form.append('chat_id', this.chatId);
+      
+      const mediaArray = [];
+      
+      photoPaths.forEach((photoPath, index) => {
+        const attachName = `photo${index}`;
+        form.append(attachName, fs.createReadStream(photoPath));
+        const mediaObj = {
+          type: 'photo',
+          media: `attach://${attachName}`
+        };
+        if (index === 0) {
+          mediaObj.caption = caption;
+          mediaObj.parse_mode = 'HTML';
+        }
+        mediaArray.push(mediaObj);
+      });
+      
+      form.append('media', JSON.stringify(mediaArray));
+
+      const response = await fetch(`${this.baseUrl}/sendMediaGroup`, {
+        method: 'POST',
+        body: form,
+      });
+
+      const result = await response.json();
+      if (!result.ok) {
+        throw new Error(result.description);
+      }
+      logger.info('Telegram media group sent successfully');
+    } catch (error) {
+      logger.error('Failed to send Telegram media group', { error: error.message });
+    }
+  }
+
   formatAlertMessage(availability, aiResult = null) {
     let message = `🚨 <b>لقيت موعد متاح فـ Questura ديال Piacenza!</b>\n\n`;
     message += `📅 <b>التاريخ:</b> ${availability.dates.join(', ')}\n`;
@@ -72,8 +110,13 @@ class TelegramService {
     return message;
   }
 
-  formatNoAvailabilityMessage(aiResult = null) {
+  formatNoAvailabilityMessage(availability, aiResult = null) {
     let message = `❌ <b>مزال ما بان حتى موعد جديد.</b>\n\n`;
+
+    if (availability && availability.monthsChecked && availability.monthsChecked.length > 0) {
+      const monthsStr = availability.monthsChecked.join('، ');
+      message += `📅 <b>الشهور اللي تقلبات:</b> ${monthsStr}\n\n`;
+    }
     
     if (aiResult && aiResult.darijaSummary) {
       message += `🤖 <b>AI:</b> ${aiResult.darijaSummary}\n\n`;
@@ -84,8 +127,13 @@ class TelegramService {
     return message;
   }
 
-  formatPossibleAvailabilityMessage(aiResult = null) {
+  formatPossibleAvailabilityMessage(availability, aiResult = null) {
     let message = `🤔 <b>كاين احتمال يكون تفتح موعد جديد، دخل تأكد بسرعة.</b>\n\n`;
+
+    if (availability && availability.monthsChecked && availability.monthsChecked.length > 0) {
+      const monthsStr = availability.monthsChecked.join('، ');
+      message += `📅 <b>الشهور:</b> ${monthsStr}\n\n`;
+    }
     
     if (aiResult && aiResult.darijaSummary) {
       message += `🤖 <b>تحليل AI:</b> ${aiResult.darijaSummary}\n`;

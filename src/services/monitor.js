@@ -27,14 +27,6 @@ class MonitorService {
       await page.waitForTimeout(5000); 
 
       const results = await this.performFullCheck(page);
-
-      // Always take a final screenshot for AI and storage
-      const screenshotName = `check_${Date.now()}.png`;
-      const screenshotPath = path.resolve(config.storage.screenshotsDir, screenshotName);
-      await fs.mkdir(config.storage.screenshotsDir, { recursive: true });
-      await page.screenshot({ path: screenshotPath, fullPage: true });
-      results.screenshotPath = screenshotPath;
-
       return results;
 
     } catch (error) {
@@ -51,7 +43,8 @@ class MonitorService {
       dates: [],
       slots: [],
       domText: '',
-      screenshotPath: null,
+      screenshotPaths: [],
+      monthsChecked: [],
       confidence: 'none'
     };
 
@@ -69,10 +62,16 @@ class MonitorService {
     availability.dates.push(...currentMonthResults.dates);
     availability.slots.push(...currentMonthResults.slots);
     availability.domText += currentMonthResults.debug.htmlSnippet;
+    if (currentMonthResults.monthTitle) availability.monthsChecked.push(currentMonthResults.monthTitle);
+
+    const screenshot1Path = path.resolve(config.storage.screenshotsDir, `check_${Date.now()}_1.png`);
+    await fs.mkdir(config.storage.screenshotsDir, { recursive: true });
+    await page.screenshot({ path: screenshot1Path, fullPage: true });
+    availability.screenshotPaths.push(screenshot1Path);
 
     // Try to navigate to next month
     try {
-      const nextButton = page.locator('button[aria-label*="Next Month"], button.ms-Calendar-nextMonth');
+      const nextButton = page.locator('[aria-label="Mese prossimo" i], [title="Mese prossimo" i], [aria-label*="Next month" i], [title*="Next month" i], [aria-label*="successivo" i], [data-icon-name="ChevronRightRegular"], button.ms-Calendar-nextMonth').first();
       if (await nextButton.isVisible()) {
         logger.info('Navigating to next month...');
         await nextButton.click();
@@ -83,7 +82,7 @@ class MonitorService {
           logger.info('No availability in next month on first try. Refreshing and retrying...');
           await page.reload({ waitUntil: 'networkidle' });
           await page.waitForTimeout(5000);
-          const nextButtonRetry = page.locator('button[aria-label*="Next Month"], button.ms-Calendar-nextMonth');
+          const nextButtonRetry = page.locator('[aria-label="Mese prossimo" i], [title="Mese prossimo" i], [aria-label*="Next month" i], [title*="Next month" i], [aria-label*="successivo" i], [data-icon-name="ChevronRightRegular"], button.ms-Calendar-nextMonth').first();
           if (await nextButtonRetry.isVisible()) {
             await nextButtonRetry.click();
             await page.waitForTimeout(3000);
@@ -91,9 +90,14 @@ class MonitorService {
           }
         }
 
+        const screenshot2Path = path.resolve(config.storage.screenshotsDir, `check_${Date.now()}_2.png`);
+        await page.screenshot({ path: screenshot2Path, fullPage: true });
+        availability.screenshotPaths.push(screenshot2Path);
+
         availability.dates.push(...nextMonthResults.dates);
         availability.slots.push(...nextMonthResults.slots);
         availability.domText += nextMonthResults.debug.htmlSnippet;
+        if (nextMonthResults.monthTitle) availability.monthsChecked.push(nextMonthResults.monthTitle);
       }
     } catch (err) {
       logger.warn('Could not navigate to next month', { error: err.message });
@@ -109,6 +113,7 @@ class MonitorService {
 
   async detectAvailability(page) {
     const results = {
+      monthTitle: '',
       dates: [],
       slots: [],
       confidence: 'none',
@@ -127,6 +132,13 @@ class MonitorService {
       const mainContent = await page.locator('main, #main-content, .ms-Booking-container').first();
       if (await mainContent.isVisible()) {
         results.debug.htmlSnippet = await mainContent.innerText();
+      }
+    } catch (e) {}
+
+    try {
+      const monthLabel = page.locator('[aria-live="assertive"], .ms-Calendar-monthAndYear, [role="heading"][aria-level="2"]').first();
+      if (await monthLabel.isVisible()) {
+        results.monthTitle = (await monthLabel.innerText()).replace(/\n/g, ' ').trim();
       }
     } catch (e) {}
 
