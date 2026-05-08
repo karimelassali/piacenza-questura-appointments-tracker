@@ -136,7 +136,7 @@ class MonitorService {
     } catch (e) {}
 
     try {
-      const monthLabel = page.locator('[aria-live="assertive"], .ms-Calendar-monthAndYear, [role="heading"][aria-level="2"]').first();
+      const monthLabel = page.locator('div[title*=" 202"], [aria-live="assertive"]:has-text("202"), .ms-Calendar-monthAndYear, [role="heading"][aria-level="2"]:has-text("202")').first();
       if (await monthLabel.isVisible()) {
         results.monthTitle = (await monthLabel.innerText()).replace(/\n/g, ' ').trim();
       }

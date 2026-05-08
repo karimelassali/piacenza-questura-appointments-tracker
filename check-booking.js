@@ -48,9 +48,17 @@ async function main() {
       });
     }
 
+    const isTestMode = process.argv.includes('--test-found') || process.env.SIMULATE_FOUND === 'true';
+
     // Determine final status based on AI or Fallback
-    const status = aiResult ? aiResult.status : availability.confidence;
-    const finalFound = aiResult ? (aiResult.status === 'confirmed') : (availability.confidence === 'confirmed');
+    const status = isTestMode ? 'confirmed' : (aiResult ? aiResult.status : availability.confidence);
+    const finalFound = isTestMode ? true : (aiResult ? (aiResult.status === 'confirmed') : (availability.confidence === 'confirmed'));
+
+    if (isTestMode) {
+      availability.dates = ['محاكاة - Simulation Date'];
+      availability.slots = ['09:00', '10:00', '11:00'];
+      logger.info('Running in TEST FOUND mode. Simulating an appointment...');
+    }
 
     if (aiResult && aiResult.siteChanged) {
       logger.warn('AI detected site structure change!');
@@ -77,7 +85,13 @@ async function main() {
     } else {
       logger.info('No availability found.');
       const message = telegramService.formatNoAvailabilityMessage(availability, aiResult);
-      if (stateManager.state.lastAvailabilityHash !== 'empty' || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+      
+      const lastNotification = stateManager.state.lastNotificationTimestamp ? new Date(stateManager.state.lastNotificationTimestamp) : new Date(0);
+      const hoursSinceLastNotification = (new Date() - lastNotification) / (1000 * 60 * 60);
+      const shouldSendKeepAlive = hoursSinceLastNotification >= 4.5; // ~5 times a day
+
+      if (stateManager.state.lastAvailabilityHash !== 'empty' || process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' || shouldSendKeepAlive) {
+        if (shouldSendKeepAlive) logger.info('Sending keep-alive negative message (4.5 hours passed).');
         await sendScreenshots(availability.screenshotPaths, message);
         await stateManager.updateState({ found: false, dates: [], slots: [] });
         stateManager.state.lastAvailabilityHash = 'empty';
@@ -86,7 +100,7 @@ async function main() {
     }
 
     if (aiResult && aiResult.status === 'fallback') {
-      await telegramService.sendMessage(telegramService.formatAIUnavailableMessage());
+      await telegramService.sendMessage(telegramService.formatAIUnavailableMessage(aiResult.reason));
     }
 
     logger.info('Monitor run completed successfully.');

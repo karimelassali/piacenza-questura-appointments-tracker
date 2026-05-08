@@ -149,8 +149,10 @@ class TelegramService {
     return `⚠️ <b>شكل الموقع تبدل شوية، ممكن نظام الفحص يحتاج تحديث.</b>\n\n<a href="${config.bookingUrl}">🔗 دخل تأكد يدوياً</a>`;
   }
 
-  formatAIUnavailableMessage() {
-    return `⚠️ <b>AI ما خدمش دابا، استعملت غير الفحص العادي.</b>`;
+  formatAIUnavailableMessage(reason = '') {
+    let msg = `⚠️ <b>AI ما خدمش دابا، استعملت غير الفحص العادي.</b>`;
+    if (reason) msg += `\n\n<i>السبب: ${reason}</i>`;
+    return msg;
   }
 
   formatSuspiciousMessage() {

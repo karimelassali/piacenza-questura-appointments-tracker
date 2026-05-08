@@ -5,6 +5,7 @@
   "main": "check-booking.js",
   "scripts": {
     "monitor": "node check-booking.js",
+    "simulate-found": "node check-booking.js --test-found",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
