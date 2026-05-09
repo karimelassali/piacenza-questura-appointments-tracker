@@ -64,6 +64,7 @@ class MonitorService {
     availability.domText += currentMonthResults.debug.htmlSnippet;
     if (currentMonthResults.monthTitle) availability.monthsChecked.push(currentMonthResults.monthTitle);
 
+    // Take screenshot of current month (AFTER clicking available date if any, so time slots show)
     const screenshot1Path = path.resolve(config.storage.screenshotsDir, `check_${Date.now()}_1.png`);
     await fs.mkdir(config.storage.screenshotsDir, { recursive: true });
     await page.screenshot({ path: screenshot1Path, fullPage: true });
@@ -71,33 +72,34 @@ class MonitorService {
 
     // Try to navigate to next month
     try {
-      const nextButton = page.locator('[aria-label="Mese prossimo" i], [title="Mese prossimo" i], [aria-label*="Next month" i], [title*="Next month" i], [aria-label*="successivo" i], [data-icon-name="ChevronRightRegular"], button.ms-Calendar-nextMonth').first();
-      if (await nextButton.isVisible()) {
+      // The next month button is a div[role="button"] with title="Mese prossimo", NOT a <button>
+      const nextButton = page.locator('[title="Mese prossimo"], [aria-label="Mese prossimo"], [aria-label*="Next month" i], [title*="Next month" i]').first();
+      
+      const nextBtnVisible = await nextButton.isVisible({ timeout: 3000 }).catch(() => false);
+      const nextBtnDisabled = nextBtnVisible ? (await nextButton.getAttribute('data-disabled')) === 'true' : true;
+      
+      if (nextBtnVisible && !nextBtnDisabled) {
         logger.info('Navigating to next month...');
         await nextButton.click();
         await page.waitForTimeout(3000);
         let nextMonthResults = await this.detectAvailability(page);
 
-        if (nextMonthResults.confidence === 'none') {
-          logger.info('No availability in next month on first try. Refreshing and retrying...');
-          await page.reload({ waitUntil: 'networkidle' });
-          await page.waitForTimeout(5000);
-          const nextButtonRetry = page.locator('[aria-label="Mese prossimo" i], [title="Mese prossimo" i], [aria-label*="Next month" i], [title*="Next month" i], [aria-label*="successivo" i], [data-icon-name="ChevronRightRegular"], button.ms-Calendar-nextMonth').first();
-          if (await nextButtonRetry.isVisible()) {
-            await nextButtonRetry.click();
-            await page.waitForTimeout(3000);
-            nextMonthResults = await this.detectAvailability(page);
-          }
-        }
-
+        // Take screenshot of next month (AFTER clicking available date if any)
         const screenshot2Path = path.resolve(config.storage.screenshotsDir, `check_${Date.now()}_2.png`);
         await page.screenshot({ path: screenshot2Path, fullPage: true });
         availability.screenshotPaths.push(screenshot2Path);
 
         availability.dates.push(...nextMonthResults.dates);
         availability.slots.push(...nextMonthResults.slots);
-        availability.domText += nextMonthResults.debug.htmlSnippet;
+        availability.domText += '\n--- NEXT MONTH ---\n' + nextMonthResults.debug.htmlSnippet;
         if (nextMonthResults.monthTitle) availability.monthsChecked.push(nextMonthResults.monthTitle);
+
+        // Upgrade confidence if next month has availability
+        if (nextMonthResults.confidence === 'confirmed') {
+          availability.confidence = 'confirmed';
+        }
+      } else {
+        logger.info('Next month button not available or disabled.');
       }
     } catch (err) {
       logger.warn('Could not navigate to next month', { error: err.message });
@@ -106,7 +108,21 @@ class MonitorService {
     availability.dates = [...new Set(availability.dates)];
     availability.slots = [...new Set(availability.slots)];
     availability.found = availability.dates.length > 0 || availability.slots.length > 0;
-    availability.confidence = currentMonthResults.confidence;
+    
+    // Set final confidence: use best from either month
+    if (availability.found) {
+      availability.confidence = 'confirmed';
+    } else if (availability.confidence !== 'confirmed') {
+      availability.confidence = currentMonthResults.confidence;
+    }
+
+    logger.info('Full check complete', {
+      found: availability.found,
+      dates: availability.dates.length,
+      slots: availability.slots.length,
+      monthsChecked: availability.monthsChecked,
+      confidence: availability.confidence
+    });
 
     return availability;
   }
@@ -118,81 +134,132 @@ class MonitorService {
       slots: [],
       confidence: 'none',
       debug: {
-        totalButtons: 0,
-        availableDayButtons: 0,
-        timeLikeButtons: 0,
-        noAvailabilityMessageVisible: false,
+        totalCalendarDays: 0,
+        availableDays: 0,
+        disabledDays: 0,
+        timeSlotsFound: 0,
         htmlSnippet: ''
       }
     };
 
-    logger.info('--- DEBUG START ---');
+    logger.info('--- DETECTION START ---');
 
+    // 1. Get page text for AI/debug
     try {
-      const mainContent = await page.locator('main, #main-content, .ms-Booking-container').first();
+      const mainContent = page.locator('main, #main-content, body').first();
       if (await mainContent.isVisible()) {
-        results.debug.htmlSnippet = await mainContent.innerText();
+        results.debug.htmlSnippet = (await mainContent.innerText()).substring(0, 5000);
       }
-    } catch (e) {}
+    } catch (e) {
+      logger.warn('Could not extract page text', { error: e.message });
+    }
 
+    // 2. Get month title from the calendar header
     try {
-      const monthLabel = page.locator('div[title*=" 202"], [aria-live="assertive"]:has-text("202"), .ms-Calendar-monthAndYear, [role="heading"][aria-level="2"]:has-text("202")').first();
-      if (await monthLabel.isVisible()) {
+      // The month title is in a div with aria-live="assertive" and a title like "Maggio 2026"
+      const monthLabel = page.locator('[aria-live="assertive"][title*="202"], div[title*="Maggio"], div[title*="Giugno"], div[title*="Luglio"], div[title*="Agosto"], div[title*="Settembre"], div[title*="Ottobre"], div[title*="Novembre"], div[title*="Dicembre"], div[title*="Gennaio"], div[title*="Febbraio"], div[title*="Marzo"], div[title*="Aprile"]').first();
+      if (await monthLabel.isVisible({ timeout: 2000 }).catch(() => false)) {
         results.monthTitle = (await monthLabel.innerText()).replace(/\n/g, ' ').trim();
+        logger.info(`Month detected: ${results.monthTitle}`);
       }
-    } catch (e) {}
+    } catch (e) {
+      logger.warn('Could not get month title', { error: e.message });
+    }
 
-    const allButtons = await page.locator('button').all();
-    results.debug.totalButtons = allButtons.length;
+    // 3. CRITICAL FIX: Calendar days are <div role="button">, NOT <button>!
+    //    - Available days: div[role="button"][data-value] WITHOUT aria-disabled="true"
+    //    - Unavailable days: div[role="button"][data-value] WITH aria-disabled="true" 
+    //      and aria-label contains "Nessun orario disponibile"
+    const allCalendarDays = await page.locator('div[role="button"][data-value]').all();
+    results.debug.totalCalendarDays = allCalendarDays.length;
+    logger.info(`Found ${allCalendarDays.length} calendar day elements`);
 
-    const daySelectors = [
-      'button[aria-label*="available"]',
-      'button[aria-label*="disponibile"]',
-      '.ms-Calendar-day--isAvailable',
-      'button:not([disabled])[aria-label*="202"]'
-    ];
-
-    for (const selector of daySelectors) {
-      const days = await page.locator(selector).all();
-      for (const day of days) {
-        const ariaLabel = await day.getAttribute('aria-label');
-        const text = await day.innerText();
-        const label = ariaLabel || text;
-        if (label && !results.dates.includes(label)) results.dates.push(label);
+    for (const day of allCalendarDays) {
+      try {
+        const ariaLabel = await day.getAttribute('aria-label') || '';
+        const ariaDisabled = await day.getAttribute('aria-disabled');
+        const dataValue = await day.getAttribute('data-value') || '';
+        const dayText = (await day.innerText()).trim();
+        
+        const isDisabled = ariaDisabled === 'true';
+        const hasNoAvailability = ariaLabel.toLowerCase().includes('nessun orario disponibile');
+        
+        logger.info(`  Day ${dayText}: aria-label="${ariaLabel}", disabled=${isDisabled}, noAvail=${hasNoAvailability}`);
+        
+        if (!isDisabled && !hasNoAvailability && dataValue) {
+          // This day is AVAILABLE!
+          results.dates.push(ariaLabel || `Day ${dayText}`);
+          results.debug.availableDays++;
+          logger.info(`  ✅ AVAILABLE: ${ariaLabel}`);
+        } else {
+          results.debug.disabledDays++;
+        }
+      } catch (e) {
+        // skip problematic elements
       }
     }
 
+    logger.info(`Available days: ${results.debug.availableDays}, Disabled days: ${results.debug.disabledDays}`);
+
+    // 4. If we found available dates, CLICK the first one to reveal time slots
     if (results.dates.length > 0) {
       try {
-        const firstDay = page.locator('button[aria-label*="available"], .ms-Calendar-day--isAvailable').first();
-        await firstDay.click();
-        await page.waitForTimeout(1500);
-      } catch (e) {}
-    }
-
-    const potentialSlotButtons = await page.locator('button').all();
-    for (const button of potentialSlotButtons) {
-      const text = (await button.innerText()).trim();
-      if (await button.isVisible() && await button.isEnabled() && detection.looksLikeTime(text)) {
-        results.slots.push(text);
+        // Click the first available (non-disabled) calendar day
+        const firstAvailableDay = page.locator('div[role="button"][data-value]:not([aria-disabled="true"])').first();
+        if (await firstAvailableDay.isVisible({ timeout: 2000 }).catch(() => false)) {
+          logger.info('Clicking first available day to reveal time slots...');
+          await firstAvailableDay.click();
+          await page.waitForTimeout(2000);
+          
+          // Now look for time slot buttons that appeared
+          // Time slots in Microsoft Bookings are actual <button> elements with time text
+          const allButtons = await page.locator('button').all();
+          for (const button of allButtons) {
+            try {
+              const text = (await button.innerText()).trim();
+              const isVisible = await button.isVisible();
+              const isEnabled = await button.isEnabled();
+              
+              if (isVisible && isEnabled && detection.looksLikeTime(text)) {
+                results.slots.push(text);
+                logger.info(`  ⏰ TIME SLOT: ${text}`);
+              }
+            } catch (e) {}
+          }
+          results.debug.timeSlotsFound = results.slots.length;
+          logger.info(`Found ${results.slots.length} time slots`);
+        }
+      } catch (e) {
+        logger.warn('Could not click available day', { error: e.message });
       }
     }
 
-    const noAvailabilityIndicators = ['text=/no appointments/i', 'text=/no available/i', 'text=/nessun appuntamento/i', 'text=/non ci sono/i', '.ms-MessageBar--error'];
-    let indicatorCount = 0;
-    for (const sel of noAvailabilityIndicators) {
-      if (await page.locator(sel).isVisible()) indicatorCount++;
+    // 5. Also check for time slots that might already be visible (without clicking)
+    if (results.slots.length === 0) {
+      const allButtons = await page.locator('button').all();
+      for (const button of allButtons) {
+        try {
+          const text = (await button.innerText()).trim();
+          const isVisible = await button.isVisible();
+          const isEnabled = await button.isEnabled();
+          if (isVisible && isEnabled && detection.looksLikeTime(text)) {
+            results.slots.push(text);
+          }
+        } catch (e) {}
+      }
     }
 
+    // 6. Determine confidence
     if (results.slots.length > 0 || results.dates.length > 0) {
       results.confidence = 'confirmed';
-    } else if (indicatorCount === 0 && results.debug.totalButtons > 5) {
+    } else if (results.debug.totalCalendarDays === 0) {
+      // Page might not have loaded correctly
       results.confidence = 'possible';
     } else {
       results.confidence = 'none';
     }
 
-    logger.info('--- DEBUG END ---');
+    logger.info(`--- DETECTION END --- Confidence: ${results.confidence}, Dates: ${results.dates.length}, Slots: ${results.slots.length}`);
     return results;
   }
 }
