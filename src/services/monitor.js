@@ -209,23 +209,41 @@ class MonitorService {
         if (await firstAvailableDay.isVisible({ timeout: 2000 }).catch(() => false)) {
           logger.info('Clicking first available day to reveal time slots...');
           await firstAvailableDay.click();
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(3000);
           
-          // Now look for time slot buttons that appeared
-          // Time slots in Microsoft Bookings are actual <button> elements with time text
-          const allButtons = await page.locator('button').all();
-          for (const button of allButtons) {
-            try {
-              const text = (await button.innerText()).trim();
-              const isVisible = await button.isVisible();
-              const isEnabled = await button.isEnabled();
-              
-              if (isVisible && isEnabled && detection.looksLikeTime(text)) {
-                results.slots.push(text);
-                logger.info(`  ⏰ TIME SLOT: ${text}`);
+          // CRITICAL: Time slots in Microsoft Bookings are inside a div[role="group"]
+          // container, NOT individual <button> elements!
+          // The container has aria-label like "Selezione dell'ora..."
+          const timeGroup = page.locator('[role="group"][aria-label*="ora" i], [role="group"][aria-label*="time" i]').first();
+          const groupVisible = await timeGroup.isVisible({ timeout: 3000 }).catch(() => false);
+          
+          if (groupVisible) {
+            // Get the full text and split by newlines to extract individual times
+            const groupText = await timeGroup.innerText();
+            const lines = groupText.split('\n').map(l => l.trim()).filter(Boolean);
+            for (const line of lines) {
+              if (detection.looksLikeTime(line)) {
+                results.slots.push(line);
+                logger.info(`  ⏰ TIME SLOT: ${line}`);
               }
-            } catch (e) {}
+            }
           }
+          
+          // Fallback: also check individual child elements and buttons
+          if (results.slots.length === 0) {
+            const allInteractive = await page.locator('button, [role="option"], [role="group"] > div').all();
+            for (const el of allInteractive) {
+              try {
+                const text = (await el.innerText()).trim();
+                const isVisible = await el.isVisible();
+                if (isVisible && detection.looksLikeTime(text)) {
+                  results.slots.push(text);
+                  logger.info(`  ⏰ TIME SLOT (fallback): ${text}`);
+                }
+              } catch (e) {}
+            }
+          }
+          
           results.debug.timeSlotsFound = results.slots.length;
           logger.info(`Found ${results.slots.length} time slots`);
         }
@@ -234,19 +252,20 @@ class MonitorService {
       }
     }
 
-    // 5. Also check for time slots that might already be visible (without clicking)
+    // 5. Also check for time slots already visible (without clicking)
     if (results.slots.length === 0) {
-      const allButtons = await page.locator('button').all();
-      for (const button of allButtons) {
-        try {
-          const text = (await button.innerText()).trim();
-          const isVisible = await button.isVisible();
-          const isEnabled = await button.isEnabled();
-          if (isVisible && isEnabled && detection.looksLikeTime(text)) {
-            results.slots.push(text);
+      try {
+        const timeGroup = page.locator('[role="group"][aria-label*="ora" i], [role="group"][aria-label*="time" i]').first();
+        if (await timeGroup.isVisible({ timeout: 1000 }).catch(() => false)) {
+          const groupText = await timeGroup.innerText();
+          const lines = groupText.split('\n').map(l => l.trim()).filter(Boolean);
+          for (const line of lines) {
+            if (detection.looksLikeTime(line)) {
+              results.slots.push(line);
+            }
           }
-        } catch (e) {}
-      }
+        }
+      } catch (e) {}
     }
 
     // 6. Determine confidence

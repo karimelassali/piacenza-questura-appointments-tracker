@@ -1,0 +1,28 @@
+{
+  "status": "confirmed",
+  "confidence": 100,
+  "reason": "Visual cues and extracted data confirm available slots",
+  "dates": [
+    "Martedì, Giugno 09, 2026"
+  ],
+  "times": [
+    "8:30",
+    "8:40",
+    "8:50",
+    "9:00",
+    "9:10",
+    "9:20",
+    "9:30",
+    "9:40",
+    "9:50",
+    "10:00",
+    "10:10",
+    "10:20",
+    "10:30",
+    "10:40",
+    "10:50"
+  ],
+  "siteChanged": false,
+  "needsManualCheck": false,
+  "darijaSummary": "موجود مواعيد"
+}

@@ -50,9 +50,27 @@ async function main() {
 
     const isTestMode = process.argv.includes('--test-found') || process.env.SIMULATE_FOUND === 'true';
 
-    // Determine final status based on AI or Fallback
-    const status = isTestMode ? 'confirmed' : (aiResult ? aiResult.status : availability.confidence);
-    const finalFound = isTestMode ? true : (aiResult ? (aiResult.status === 'confirmed') : (availability.confidence === 'confirmed'));
+    // Determine final status: DOM detection ALWAYS takes priority when it finds something.
+    // AI can only UPGRADE a negative result, never DOWNGRADE a positive one.
+    let status, finalFound;
+    if (isTestMode) {
+      status = 'confirmed';
+      finalFound = true;
+    } else if (availability.found || availability.confidence === 'confirmed') {
+      // DOM found real availability — TRUST IT, ignore AI if it disagrees
+      status = 'confirmed';
+      finalFound = true;
+      if (aiResult && aiResult.status !== 'confirmed') {
+        logger.warn(`AI disagreed with DOM detection (AI said "${aiResult.status}") — IGNORING AI, trusting DOM.`);
+      }
+    } else if (aiResult && aiResult.status === 'confirmed') {
+      // AI found something DOM missed — trust AI
+      status = 'confirmed';
+      finalFound = true;
+    } else {
+      status = aiResult ? aiResult.status : availability.confidence;
+      finalFound = false;
+    }
 
     if (isTestMode) {
       availability.dates = ['محاكاة - Simulation Date'];
